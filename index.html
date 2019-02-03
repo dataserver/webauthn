@@ -1,0 +1,551 @@
+<!doctype html>
+<html>
+<head>
+<title>webauthn php server side example and test</title>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+</head>
+<body>
+<div class="container">
+	<h1 class="display-3">
+		webauthn
+	</h1>
+	<div class="card mt-5">
+		<div class="card-header">
+			<h2>Register User</h2>
+		</div>
+		<div class="card-body">
+			
+			<form id="form-register-user">
+				<div class="form-group">
+					<label>Username</label>
+					<input type="text" name="username" class="form-control" placeholder="Enter username">
+				</div>
+				<div class="form-group">
+					<label>Password</label>
+					<input type="text" name="password" class="form-control" placeholder="Enter password">
+				</div>
+				<input type="hidden" name="action" value="register-user">
+				<button type="submit" class="btn btn-primary">Submit</button>
+				<div class="hint alert alert-info mt-3" style="display: none;" role="alert">
+					
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<div class="card mt-5">
+		<div class="card-header">
+			<h2>User Login</h2>
+		</div>
+		<div class="card-body">
+			<form id="form-login">
+				<div class="form-group">
+					<label>Username</label>
+					<input type="text" name="username" class="form-control" placeholder="Enter username">
+				</div>
+				<div class="form-group">
+					<label>Password</label>
+					<input type="text" name="password" class="form-control" placeholder="Enter password">
+				</div>
+				<div class="form-check">
+					<input type="checkbox" name="rememberme" value="1" class="form-check-input">
+					<label>Remember this device</label>
+				</div>
+
+				<input type="hidden" name="action" value="login">
+				<button type="submit" class="btn btn-primary">Submit</button>
+				<div class="hint alert alert-info mt-3" style="display: none;" role="alert">
+					Do your thing: press button on key, swipe fingerprint or whatever
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<div class="card mt-5">
+		<div class="card-header">
+			<h2>User Login</h2>
+		</div>
+		<div class="card-body">
+			<form id="logout">
+				<button type="submit" class="btn btn-danger">Logout</button>
+			</form>
+		</div>
+	</div>
+
+	<div class="card mt-5">
+		<div class="card-header">
+			<h2>Register a Key</h2>
+		</div>
+		<div class="card-body">
+			<form id="form-register-challenge">
+				<div class="form-group">
+					<label>Name the key:</label>
+					<input type="text" name="keyname" class="form-control" placeholder="Key Name" required>
+					<small class="form-text text-muted">Give your key a name so you can modify it in the future.</small>
+				</div>
+				<input type="hidden" name="action" value="register-challenge">
+				<button type="submit" class="btn btn-primary">Register</button>
+				<div class="hint alert alert-info mt-3" style="display: none;" role="alert">
+					Do your thing: press button on key, swipe fingerprint or whatever
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<div class="card mt-5">
+		<div class="card-header">
+			<h2>Keychain</h2>
+		</div>
+		<div class="card-body">			
+			<table class="table">
+				<thead>
+					<th>Key name</th>
+					<th></th>
+				</thead>
+				<tbody id="key-list">
+					
+				</tbody>
+			</table>
+			<button id="button-reflesh-keylist" class="btn btn-primary btn-sm">List my keys</button>
+		</div>
+	</div>
+
+
+
+</div>
+
+
+<!-- Flexbox container for aligning the toasts -->
+<div aria-live="polite" aria-atomic="true" style="position:relative; min-height:200px;">
+	<div style="position:fixed; top:10px; right:10px;">
+		<div class="toast" id="notification-toast" role="alert" aria-live="assertive" aria-atomic="true">
+			<div class="toast-header">
+				<span class="toast-badge m-1">
+					
+				</span> 
+				<strong class="mr-auto">WebAuthn</strong>
+				<small></small>
+				<button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+				</button>
+			</div>
+			<div class="toast-body">
+				xyz.
+			</div>
+		</div>
+	</div>
+</div>
+
+
+<script src="webauthnregister.js"></script>
+<script src="webauthnauthenticate.js"></script>
+<!-- only for the example, the webauthn js does not need jquery itself -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.2.1/js/bootstrap.bundle.min.js" integrity="sha256-MSYVjWgrr6UL/9eQfQvOyt6/gsxb6dpwI1zqM5DbLCs=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/2.2.0/js.cookie.min.js" integrity="sha256-9Nt2r+tJnSd2A2CRUvnjgsD+ES1ExvjbjBNqidm9doI=" crossorigin="anonymous"></script>
+
+<script>
+// ASCII TEXT
+// http://patorjk.com/software/taag/#p=display&h=0&c=c&f=ANSI%20Shadow&t=SomeThing
+$(function(){
+  	$("#notification-toast").toast({
+  		delay: 7000
+  	});
+	function isObject(val) {
+	    if (val === null) { return false;}
+	    return ( (typeof val === 'function') || (typeof val === 'object') );
+	}
+  	function showToast(label="", response="") {
+  		let badge;
+  		let html ="";
+  		if ( isObject(response) ) {
+			if('error' in response){
+			    //alert("yes, i have that property");
+			    if ('errors' in response.error) {
+		  			let errors = response.error.errors;
+		  			for (let i = errors.length - 1; i >= 0; i--) {
+		  				html += errors[i] +"<br>";
+		  			}
+			    } else {
+			    	html = response.error.message;
+			    }
+			}
+			if('data' in response){
+			    html = response.data.message;
+			}
+
+  		} else {
+  			html = response;
+  		}
+  		switch(label) {
+  			case "primary":
+	  			badge = `<span class="badge badge-primary">Primary</span>`;
+  				break;
+  			case "secondary":
+  				badge = `<span class="badge badge-secondary">Secondary</span>`;
+  				break;
+  			case "success":
+  				badge = `<span class="badge badge-success">Success</span>`;
+  				break;
+  			case "danger":
+  				badge = `<span class="badge badge-danger">Error</span>`;
+  				break;
+  			case "warning":
+  				badge = `<span class="badge badge-warning">Warning</span>`;
+  				break;
+  			case "info":
+  				badge = `<span class="badge badge-info">Info</span>`;
+  				break;
+  			case "light":
+  				badge = `<span class="badge badge-light">Light</span>`;
+  				break;
+  			case "dark":
+  				badge = `<span class="badge badge-dark">Dark</span>`;
+  				break;
+  			default:
+  				badge = `<span class="badge badge-info">Info</span>`;
+  		}
+  		$("#notification-toast .toast-badge").html(badge);
+		$("#notification-toast .toast-body").html(html);
+		$("#notification-toast").toast("show");		
+  	}
+
+
+/***
+ *    ██████╗ ███████╗ ██████╗ ██╗███████╗████████╗███████╗██████╗     ██╗   ██╗███████╗███████╗██████╗ 
+ *    ██╔══██╗██╔════╝██╔════╝ ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗    ██║   ██║██╔════╝██╔════╝██╔══██╗
+ *    ██████╔╝█████╗  ██║  ███╗██║███████╗   ██║   █████╗  ██████╔╝    ██║   ██║███████╗█████╗  ██████╔╝
+ *    ██╔══██╗██╔══╝  ██║   ██║██║╚════██║   ██║   ██╔══╝  ██╔══██╗    ██║   ██║╚════██║██╔══╝  ██╔══██╗
+ *    ██║  ██║███████╗╚██████╔╝██║███████║   ██║   ███████╗██║  ██║    ╚██████╔╝███████║███████╗██║  ██║
+ *    ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝     ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝
+ *                                                                                                      
+ */
+
+	$("#form-register-user").submit(function(event){
+		event.preventDefault();
+		let self = $(this);
+		let username = self.find("[name=username]").val();
+		let password = self.find("[name=password]").val();
+		
+		if (username == "")		 {
+			showToast("danger", "username is empty");
+			return false;
+		}
+		if (password == "")		 {
+			showToast("danger", "password is empty");
+			return false;
+		}
+		$.ajax({
+			url: "server.php",
+			method: "POST",
+			data: {
+				action: 'register-user',
+				username: username,
+				password: password,
+			},
+			dataType: "json",
+			success: function(resp){
+				showToast("success", resp);
+			},
+			error: function(xhr, status, error){
+				showToast("danger", xhr.responseJSON);
+			}
+		});
+	});
+
+
+/***
+ *    ██╗      ██████╗  ██████╗ ██╗███╗   ██╗    ██╗   ██╗███████╗███████╗██████╗ 
+ *    ██║     ██╔═══██╗██╔════╝ ██║████╗  ██║    ██║   ██║██╔════╝██╔════╝██╔══██╗
+ *    ██║     ██║   ██║██║  ███╗██║██╔██╗ ██║    ██║   ██║███████╗█████╗  ██████╔╝
+ *    ██║     ██║   ██║██║   ██║██║██║╚██╗██║    ██║   ██║╚════██║██╔══╝  ██╔══██╗
+ *    ███████╗╚██████╔╝╚██████╔╝██║██║ ╚████║    ╚██████╔╝███████║███████╗██║  ██║
+ *    ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝╚═╝  ╚═══╝     ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝
+ *                                                                                
+ */
+
+	$("#form-login").submit(function(event){
+		let self = $(this);
+		let username = self.find("[name=username]").val();
+		let password = self.find("[name=password]").val();
+		let rememberme = self.find("[name=rememberme]:checked").val();
+		rememberme = (rememberme) ? 1 : 0;
+		event.preventDefault();
+
+		if (username == "")		 {
+			showToast("danger", "username is empty");
+			return false;
+		}
+		if (password == "")		 {
+			showToast("danger", "password is empty");
+			return false;
+		}
+
+		
+		$.ajax({
+			url: "server.php",
+			method: "POST",
+			data: {
+				action: 'login-challenge',
+				username: username,
+				password: password,
+				rememberme: rememberme,
+			},
+			dataType: "json",
+			success: function(resp){
+				/* activate the key and get the response */
+				if (resp.data.challenge) {
+					$("#form-login .hint").show();
+					webauthnAuthenticate(resp.data.challenge, function(success, keyinfo){
+						$("#form-login .hint").hide();
+						if (success) {
+							$.ajax({
+								url: "server.php",
+								method: "POST",
+								data: {
+									action: 'login-authenticate',
+									keyinfo: keyinfo,
+									rememberme: rememberme,
+								},
+								dataType: "json",
+								success: function(resp){
+									showToast("success", "login completed successfully");
+									$("#button-reflesh-keylist").trigger("click");
+								},
+								error: function(xhr, status, error){
+									showToast("danger", xhr.responseJSON);
+								}
+							});
+						} else {
+							showToast("danger", keyinfo);
+						}
+					});	
+				}
+				if (resp.data.logged) {
+					showToast("success", 'Login success');
+				}
+			},		
+			error: function(xhr, status, error){
+				$("#form-login .hint").hide();
+				showToast("danger", xhr.responseJSON);
+			}
+		});
+	});
+
+
+/***
+ *    ██╗      ██████╗  ██████╗  ██████╗ ██╗   ██╗████████╗
+ *    ██║     ██╔═══██╗██╔════╝ ██╔═══██╗██║   ██║╚══██╔══╝
+ *    ██║     ██║   ██║██║  ███╗██║   ██║██║   ██║   ██║   
+ *    ██║     ██║   ██║██║   ██║██║   ██║██║   ██║   ██║   
+ *    ███████╗╚██████╔╝╚██████╔╝╚██████╔╝╚██████╔╝   ██║   
+ *    ╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   
+ *                                                         
+ */
+
+	$("#logout").click(function(event){
+		event.preventDefault();
+		$.ajax({
+			url: "server.php",
+			method: "POST",
+			data: {
+				action: "logout",
+			},
+			dataType: "json",
+			success: function(resp){
+				showToast("danger", "You logged out");
+			},
+			error: function(xhr, status, error){
+				showToast("danger", xhr.responseJSON);
+			}
+		});
+		Cookies.remove('r_token');
+	});
+
+
+
+
+
+
+
+
+
+
+
+/***
+ *    ██████╗ ███████╗ ██████╗ ██╗███████╗████████╗███████╗██████╗     ██╗  ██╗███████╗██╗   ██╗
+ *    ██╔══██╗██╔════╝██╔════╝ ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗    ██║ ██╔╝██╔════╝╚██╗ ██╔╝
+ *    ██████╔╝█████╗  ██║  ███╗██║███████╗   ██║   █████╗  ██████╔╝    █████╔╝ █████╗   ╚████╔╝ 
+ *    ██╔══██╗██╔══╝  ██║   ██║██║╚════██║   ██║   ██╔══╝  ██╔══██╗    ██╔═██╗ ██╔══╝    ╚██╔╝  
+ *    ██║  ██║███████╗╚██████╔╝██║███████║   ██║   ███████╗██║  ██║    ██║  ██╗███████╗   ██║   
+ *    ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝    ╚═╝  ╚═╝╚══════╝   ╚═╝   
+ *                                                                                              
+ */
+
+	$("#form-register-challenge").submit(function(event){
+		event.preventDefault();
+		let self = $(this);
+		let keyname = self.find("[name=keyname]").val();
+
+		if (keyname == "")		 {
+			showToast("danger", "name of key is empty");
+			return false;
+		}
+		$("#form-register-key .hint").show();
+		$.ajax({
+			url: "server.php",
+			method: "POST",
+			data: {
+				action: "register-challenge",
+				keyname: keyname,
+			},
+			dataType: "json",
+			success: function(resp){
+				/* activate the key and get the response */
+				webauthnRegister(resp.data.challenge, function(success, keyinfo){
+					$("#form-register-key .hint").hide();
+					if (success) {
+						$.ajax({
+							url: "server.php",
+							method: "POST",
+							data: {
+								action: "register-key",
+								keyinfo: keyinfo,
+								keyname: keyname,
+							},
+							dataType: "json",
+							success: function(resp){
+								showToast("success", resp.data.message);
+								$("#button-reflesh-keylist").trigger("click");
+							},
+							error: function(xhr, status, error){
+								showToast("danger", xhr.responseJSON);
+							}
+						});
+					} else {
+						showToast("danger", "Error");
+					}
+				});
+			},
+			error: function(xhr, status, error){
+				$("#form-register-key .hint").hide();
+				showToast("danger", xhr.responseJSON);
+			}
+		});
+	});
+
+
+/***
+ *     ██████╗ ███████╗████████╗    ██╗  ██╗███████╗██╗   ██╗███████╗
+ *    ██╔════╝ ██╔════╝╚══██╔══╝    ██║ ██╔╝██╔════╝╚██╗ ██╔╝██╔════╝
+ *    ██║  ███╗█████╗     ██║       █████╔╝ █████╗   ╚████╔╝ ███████╗
+ *    ██║   ██║██╔══╝     ██║       ██╔═██╗ ██╔══╝    ╚██╔╝  ╚════██║
+ *    ╚██████╔╝███████╗   ██║       ██║  ██╗███████╗   ██║   ███████║
+ *     ╚═════╝ ╚══════╝   ╚═╝       ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝
+ *                                                                   
+ */
+
+  	$("#button-reflesh-keylist").click(function(event){
+  		event.preventDefault();
+
+		$.ajax({
+			url: "server.php",
+			method: "POST",
+			data: {
+				action: 'key-list',
+			},
+			dataType: "json",
+			success: function(resp){
+				let html = "";
+				let keys = resp.data.keys;
+				if (resp.data.keys) {
+					if (resp.data.keys.length > 0){
+				  		for (let i=0; i<keys.length; i++) {
+				  			html += `<tr data-key-hash="${keys[i]['keyhash']}"><td> ` + keys[i]['keyname'] + `</td><td> <button type="button" class="js-key-delete btn btn-danger btn-sm"  data-key-hash="${keys[i]['keyhash']}">delete</button> </td></tr>`;
+				  		}
+					} else {
+			  			showToast("info", "No key found");
+			  		}
+				}
+		  		$("#key-list").html(html);
+			},
+			error: function(xhr, status, error){
+				showToast("danger", xhr.responseJSON);
+			}
+		});
+  	});
+
+
+
+/***
+ *    ██████╗ ███████╗██╗     ███████╗████████╗███████╗    ██╗  ██╗███████╗██╗   ██╗
+ *    ██╔══██╗██╔════╝██║     ██╔════╝╚══██╔══╝██╔════╝    ██║ ██╔╝██╔════╝╚██╗ ██╔╝
+ *    ██║  ██║█████╗  ██║     █████╗     ██║   █████╗      █████╔╝ █████╗   ╚████╔╝ 
+ *    ██║  ██║██╔══╝  ██║     ██╔══╝     ██║   ██╔══╝      ██╔═██╗ ██╔══╝    ╚██╔╝  
+ *    ██████╔╝███████╗███████╗███████╗   ██║   ███████╗    ██║  ██╗███████╗   ██║   
+ *    ╚═════╝ ╚══════╝╚══════╝╚══════╝   ╚═╝   ╚══════╝    ╚═╝  ╚═╝╚══════╝   ╚═╝   
+ *                                                                                  
+ */
+
+  	$(document).on('click', ".js-key-delete", function(event) {
+  		event.preventDefault();
+  		let self = $(this);
+  		let keyhash = self.attr("data-key-hash");
+
+		$.ajax({
+			url: "server.php",
+			method: "POST",
+			data: {
+				action: 'key-delete',
+				keyhash: keyhash,
+			},
+			dataType: "json",
+			success: function(resp){
+				$("tr[data-key-hash='"+ keyhash +"']").remove();
+				showToast("success", "key removed");
+			},
+			error: function(xhr, status, error){
+				showToast("danger", xhr.responseJSON);
+			}
+		});
+  	});
+
+
+/***
+ *     ██████╗ ██████╗  ██████╗ ██╗  ██╗██╗███████╗
+ *    ██╔════╝██╔═══██╗██╔═══██╗██║ ██╔╝██║██╔════╝
+ *    ██║     ██║   ██║██║   ██║█████╔╝ ██║█████╗  
+ *    ██║     ██║   ██║██║   ██║██╔═██╗ ██║██╔══╝  
+ *    ╚██████╗╚██████╔╝╚██████╔╝██║  ██╗██║███████╗
+ *     ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝
+ *                                                 
+ */
+let token = Cookies.get('r_token');
+let sid = Cookies.get('user_session');
+if (typeof(token) != "undefined" && typeof(sid) == "undefined") {
+// if (typeof(token) != "undefined") {
+	$.ajax({
+		url: "server.php",
+		method: "POST",
+		data: {
+			action: 'check-token',
+		},
+		dataType: "json",
+		success: function(resp){
+			showToast("success", resp.data.message);
+		},
+		error: function(xhr, status, error){
+			Cookies.remove('r_token');
+		}
+	});
+}
+
+
+
+	
+});
+</script>
+    
+</body>
+</html>
