@@ -410,7 +410,7 @@ if (! empty($_POST['action'])) {
 					oops("password is empty or too short (2 chars) ");
 				}
 
-				if ($_SESSION['attempt_failed'] > 60) {
+				if ($_SESSION['attempt_failed'] > 6) {
 					addFailedLogAttempt($pdo, $username, "login: blocked: too many attempts");
 					oops("too many tries. Access denied", 403);
 				}
