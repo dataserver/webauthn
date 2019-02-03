@@ -270,13 +270,21 @@ function checkToken(PDO $pdo, $token = false) {
 
 function oops($s = "", $code = 400){
 
-	$json = [
-	    'method' => ACTION,
-	    'error'=> [
-	    	'code' => $code,
-	        'message' => $s,
-	    ]
-	];
+	if (is_array($s)) {
+		$json = [
+		    'method' => ACTION,
+		    'error'=> $s
+		];
+	} else {
+		$json = [
+		    'method' => ACTION,
+		    'error'=> [
+		    	'code' => $code,
+		        'message' => $s,
+		    ]
+		];
+
+	}
 
 	header('Content-type: application/json');
 	http_response_code($code);
@@ -402,14 +410,23 @@ if (! empty($_POST['action'])) {
 					oops("password is empty or too short (2 chars) ");
 				}
 
-				if ($_SESSION['attempt_failed'] > 6) {
+				if ($_SESSION['attempt_failed'] > 60) {
+					addFailedLogAttempt($pdo, $username, "login: blocked: too many attempts");
 					oops("too many tries. Access denied", 403);
 				}
-				if ( (time()-$_SESSION['attempt_ts']) < (5*$_SESSION['attempt_failed']) )  { // 5 sec * each try
+				$delay_in_seconds = pow(3, $_SESSION['attempt_failed']);
+				if ( 
+					($_SESSION['attempt_ts'] + $delay_in_seconds) > time()
+				) {
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
 
-					oops("Stop spamming!<br> You need to wait ". (5 * $_SESSION['attempt_failed']) . " seconds before next try.");
+					addFailedLogAttempt($pdo, $username, "login: spamming");
+					oops([
+						'message' => "Stop spamming!<br> You need to wait <b>".  gmdate("H\h i\m s\s", $delay_in_seconds) . "</b> before next try.",
+						'code' => 400,
+						'login_delay' => $delay_in_seconds
+					]);
 				}
 
 				// CHECK username
@@ -417,10 +434,24 @@ if (! empty($_POST['action'])) {
 				if (! $user) {
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
-					addFailedLogAttempt($pdo, $username, "username not found");
+					addFailedLogAttempt($pdo, $username, "username: not found");
 
 					oops("Login failed. Please check your username and password", 401);
 				}
+				// Check delay for failed attemps
+				if ($user->failed_login_attempts > 0) {
+					$delay_in_seconds = pow(3, $user->failed_login_attempts);
+					if (
+						( $user->failed_login_ts + $delay_in_seconds) > time()
+					) {
+						$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
+						$_SESSION['attempt_ts'] = time();
+
+						setUserFailedLogin($pdo, $user);
+						oops("Stop spamming!<br> You need to wait <b>".  gmdate("H\h i\m s\s", $delay_in_seconds) . "</b> before next try.");
+					}
+				}
+
 				//  AND password
 				if (password_verify(
 					    base64_encode(
@@ -468,7 +499,7 @@ if (! empty($_POST['action'])) {
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
 					setUserFailedLogin($pdo, $user);
-					addFailedLogAttempt($pdo, $user->username, "password wrong");
+					addFailedLogAttempt($pdo, $user->username, "password: wrong");
 
 					oops("Login failed. Please check your username and password", 401);
 				}
@@ -734,6 +765,8 @@ if (! empty($_POST['action'])) {
 			case "logout":
 				$_SESSION['logged'] = false;
 				unset($_SESSION['userid']);
+				setcookie('logged', "", time()-3600, '/');
+				setcookie('r_token', "", time()-3600, '/');
 				$json = [
 				    'method' => 'logout',
 				    'data'=> [
