@@ -9,6 +9,7 @@ which just includes this file, it should then work. Alternatively set it as a li
 define('SYS_DEBUG', false);
 
 include_once('webauthn.php');
+include_once('CI/User_agent.php');
 
 /* from https://github.com/2tvenom/CBOREncode :  */
 include_once('CBOREncode/src/CBOR/CBOREncoder.php');
@@ -16,6 +17,7 @@ include_once('CBOREncode/src/CBOR/Types/CBORByteString.php');
 include_once('CBOREncode/src/CBOR/CBORExceptions.php');
 
 function EstablishDBCon() {
+
     $pdo = false;
     try{ 
 		$pdo = new PDO('sqlite:database/users.sqlite3');
@@ -25,15 +27,32 @@ function EstablishDBCon() {
 			"username" TEXT UNIQUE,
 			"password" TEXT,
 			"displayname" TEXT,
-			"webauthnkeys" TEXT
+			"webauthnkeys" TEXT,
+			"failed_login_attempts" INTEGER DEFAULT 0,
+			"failed_login_ts" INTEGER,
+			"lastlogin_on" TEXT,
+			"created_on" TEXT
 		)');
+
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "auth_tokens" (
 			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE ,
 			"selector" TEXT,
 			"hashedvalidator" TEXT,
 			"userid" INTEGER,
-			"expires" INTEGER
+			"expires" INTEGER,
+			"created_on" TEXT
 		)');
+
+		$pdo->exec('CREATE TABLE IF NOT EXISTS "login_attempts" (
+			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE ,
+			"username" TEXT,
+			"reason" TEXT,
+			"agent" TEXT,
+			"ip" TEXT,
+			"ts" INTEGER,
+			"created_on" TEXT
+		)');
+		
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `username` ON `users` (`username` ASC)');
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `selector` ON `auth_tokens` ( `selector` ASC)');
     } catch (Exception $e) {
@@ -44,7 +63,9 @@ function EstablishDBCon() {
 }
 
 
+
 function getUserById(PDO $pdo, $id = false) {
+
 	if ($id) {
 		$stmt = $pdo->prepare("SELECT * FROM users WHERE id=:id LIMIT 1");
 		$stmt->bindValue(":id", $id, PDO::PARAM_INT);
@@ -59,7 +80,9 @@ function getUserById(PDO $pdo, $id = false) {
 
 	return false;
 }
+
 function getUserByName(PDO $pdo, $username = false) {
+
 	if ($username) {
 		$stmt = $pdo->prepare("SELECT * FROM users WHERE username=:username LIMIT 1");
 		$stmt->bindValue(":username", $username, PDO::PARAM_STR);
@@ -74,17 +97,19 @@ function getUserByName(PDO $pdo, $username = false) {
 
 	return false;
 }
+
 function addUser(PDO $pdo, $username = false, $password = false) {
 
 	if ($username && $password) {
 		$displayname = strtoupper('Mr. ' . $username);
-
 		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("INSERT INTO users (username, password, displayname, webauthnkeys) VALUES (:username, :password, :displayname, :webauthnkeys)");
-		$stmt->bindValue(":username", $username);
-		$stmt->bindValue(":password", $password);
-		$stmt->bindValue(":displayname", $displayname);
-		$stmt->bindValue(":webauthnkeys", '');
+		$stmt = $pdo->prepare("INSERT INTO users (username, password, displayname, webauthnkeys, lastlogin_on, created_on) VALUES (:username, :password, :displayname, :webauthnkeys, :lastlogin_on, :created_on)");
+		$stmt->bindValue(":username", $username, PDO::PARAM_STR);
+		$stmt->bindValue(":password", $password, PDO::PARAM_STR);
+		$stmt->bindValue(":displayname", $displayname, PDO::PARAM_STR);
+		$stmt->bindValue(":webauthnkeys", '', PDO::PARAM_STR);
+		$stmt->bindValue(":lastlogin_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+		$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
 		$stmt->execute();
 		$id = $pdo->lastInsertId();
 		$pdo->commit();
@@ -99,6 +124,63 @@ function addUser(PDO $pdo, $username = false, $password = false) {
 
 	return false;
 }
+function addFailedLogAttempt(PDO $pdo, $username = false, $reason = "") {
+
+	if ($username) {
+		$ip = $_SERVER['REMOTE_ADDR'];
+		$agent = new CI_User_agent();
+
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, ts, created_on) VALUES (:username, :reason, :ip, :agent, :ts, :created_on)");
+		$stmt->bindValue(":username", $username, PDO::PARAM_STR);
+		$stmt->bindValue(":reason", $reason, PDO::PARAM_STR);
+		$stmt->bindValue(":ip", $ip, PDO::PARAM_STR);
+		$stmt->bindValue(":agent", $agent->agent_string(), PDO::PARAM_STR);
+		$stmt->bindValue(":ts", time(), PDO::PARAM_INT);
+		$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+		$stmt->execute();
+		$pdo->commit();
+		return true;
+	}
+	return false;
+}
+function setUserSuccessfulLogin(PDO $pdo, $user = false) {
+
+	if ($user) {
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("UPDATE users SET failed_login_attempts=:failed_login_attempts, failed_login_ts=:failed_login_ts, lastlogin_on=:lastlogin_on WHERE id=:id");
+		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+		$stmt->bindValue(":failed_login_attempts", 0, PDO::PARAM_INT);
+		$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
+		$stmt->bindValue(":lastlogin_on",  date("Y-m-d H:i:s"), PDO::PARAM_STR);
+		$stmt->execute();
+		$count = $stmt->rowCount();
+		$pdo->commit();
+		if ($count > 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function setUserFailedLogin(PDO $pdo, $user = false) {
+
+	if ($user) {
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("UPDATE users SET failed_login_attempts=:failed_login_attempts , failed_login_ts=:failed_login_ts WHERE id=:id");
+		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+		$stmt->bindValue(":failed_login_attempts", ($user->failed_login_attempts + 1), PDO::PARAM_INT);
+		$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
+		$stmt->execute();
+		$count = $stmt->rowCount();
+		$pdo->commit();
+		if ($count > 0) {
+			return true;
+		}
+	}
+	return true;
+}
+
 function setKey(PDO $pdo, $user = false, $webauthnkeys = false) {
 
 	if ($user && $webauthnkeys) {
@@ -115,6 +197,7 @@ function setKey(PDO $pdo, $user = false, $webauthnkeys = false) {
 	}
 	return false;
 }
+
 function removeKey(PDO $pdo, $user = false, $keyhash = false) {
 
 	if ($user && $keyhash) {
@@ -135,6 +218,7 @@ function removeKey(PDO $pdo, $user = false, $keyhash = false) {
 
 	return false;
 }
+
 function createToken(PDO $pdo, $userid = false) {
 
 	if ($userid) {
@@ -144,11 +228,12 @@ function createToken(PDO $pdo, $userid = false) {
 		$hashedvalidator = hash('sha384', $validator, false);
 		$expires = time() + 30*24*60*60;
 		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("INSERT INTO auth_tokens (selector, hashedvalidator, userid, expires) VALUES (:selector, :hashedvalidator, :userid, :expires)");
+		$stmt = $pdo->prepare("INSERT INTO auth_tokens (selector, hashedvalidator, userid, expires, created_on) VALUES (:selector, :hashedvalidator, :userid, :expires, :created_on)");
 		$stmt->bindValue(":selector", $selector, PDO::PARAM_STR);
 		$stmt->bindValue(":hashedvalidator", $hashedvalidator , PDO::PARAM_STR);
 		$stmt->bindValue(":userid", $userid, PDO::PARAM_INT);
 		$stmt->bindValue(":expires", $expires, PDO::PARAM_INT);
+		$stmt->bindValue(":created_on", date("Y-m-d H:i:s") ,PDO::PARAM_STR);
 		$stmt->execute();
 		$pdo->commit();
 
@@ -157,6 +242,7 @@ function createToken(PDO $pdo, $userid = false) {
 
 	return false;
 }
+
 function checkToken(PDO $pdo, $token = false) {
 
 	if ($token && strpos($token, ':') !== false) {
@@ -181,7 +267,8 @@ function checkToken(PDO $pdo, $token = false) {
 }
 
 
-function oops($s, $code = 400){
+
+function oops($s = "", $code = 400){
 
 	$json = [
 	    'method' => ACTION,
@@ -190,18 +277,23 @@ function oops($s, $code = 400){
 	        'message' => $s,
 	    ]
 	];
+
 	header('Content-type: application/json');
 	http_response_code($code);
 	echo json_encode($json);
 	exit;
 }
-function logger($title, $log_msg="") {
-    $log_file_data = 'log_' . date('d-M-Y') . '.log';
+
+function logger($title = "", $log_msg = "") {
+
+    $log_file_data = 'log_' . date('Y-m-d') . '.log';
     if (SYS_DEBUG) {
 		file_put_contents($log_file_data, "[". date("Y-m-d H:i:s") ."]	". $title . "	". $log_msg . "\n", FILE_APPEND);
     }
 }
+
 function removeElementWithValue($array, $key, $value){
+
     foreach($array as $subKey => $subArray){
     	if($subArray[$key] == $value) {
     		unset($array[$subKey]);
@@ -259,7 +351,7 @@ if (! empty($_POST['action'])) {
 				$password = $_POST['password'] ?? '';
 
 				if (empty($username)) {
-					oops("userName is empty ");
+					oops("username is empty ");
 				}
 				if (empty($password) OR strlen($password) < 2) {
 					oops("password is empty or too short (2 chars) ");
@@ -304,7 +396,7 @@ if (! empty($_POST['action'])) {
 				$password = $_POST['password'] ?? '';
 
 				if (empty($username)) {
-					oops("userName is empty ");
+					oops("username is empty ");
 				}
 				if (empty($password) OR strlen($password) < 2) {
 					oops("password is empty or too short (2 chars) ");
@@ -325,6 +417,7 @@ if (! empty($_POST['action'])) {
 				if (! $user) {
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
+					addFailedLogAttempt($pdo, $username, "username not found");
 
 					oops("Login failed. Please check your username and password", 401);
 				}
@@ -356,6 +449,7 @@ if (! empty($_POST['action'])) {
 						unset($_SESSION['attempt_failed']);
 						unset($_SESSION['attempt_ts']);
 						setcookie("logged", true, 0, "/");
+						setUserSuccessfulLogin($pdo, $user);
 
 						if ($_POST['rememberme']) {							
 							$r_token = createToken($pdo, $user->id);
@@ -373,6 +467,8 @@ if (! empty($_POST['action'])) {
 				} else { // password_verify() failed :(
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
+					setUserFailedLogin($pdo, $user);
+					addFailedLogAttempt($pdo, $user->username, "password wrong");
 
 					oops("Login failed. Please check your username and password", 401);
 				}
@@ -410,6 +506,7 @@ if (! empty($_POST['action'])) {
 					unset($_SESSION['attempt_failed']);
 					unset($_SESSION['attempt_ts']);
 					setcookie("logged", true, 0, "/");
+					setUserSuccessfulLogin($pdo, $user);
 
 					if ($_POST['rememberme']) {
 						$r_token = createToken($pdo, $user->id);

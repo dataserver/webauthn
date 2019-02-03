@@ -533,6 +533,7 @@ if (typeof(r_token) != "undefined" && typeof(logged) == "undefined") {
 			showToast("success", resp.data.message);
 		},
 		error: function(xhr, status, error){
+			Cookies.remove('r_token');
 		}
 	});
 }
