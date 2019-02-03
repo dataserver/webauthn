@@ -597,9 +597,15 @@ if (! empty($_POST['action'])) {
 						    ]
 						];
 					} else {
+						unset($_COOKIE['r_token']);
+						setcookie('r_token', "", time()-3600, '/');
+
 						oops("Invalid Cookie");
 					}
 				} else {
+					unset($_COOKIE['r_token']);
+					setcookie('r_token', "", time()-3600, '/');
+
 					oops("Invalid Cookie");
 				}
 				break;
