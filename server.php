@@ -36,31 +36,15 @@ function EstablishDBCon() {
 		)');
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `username` ON `users` (`username` ASC)');
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `selector` ON `auth_tokens` ( `selector` ASC)');
-		
     } catch (Exception $e) {
-        // Logging here is a good idea
+       logger('db connect', json_encode($e));
     }
+
     return $pdo;
-
-}
-$pdo = EstablishDBCon();
-function logger($title, $log_msg="") {
-    $log_file_data = 'log_' . date('d-M-Y') . '.log';
-    if (SYS_DEBUG) {
-		file_put_contents($log_file_data, "[". date("Y-m-d H:i:s") ."]	". $title . "	". $log_msg . "\n", FILE_APPEND);
-    }
-}
-function removeElementWithValue($array, $key, $value){
-     foreach($array as $subKey => $subArray){
-          if($subArray[$key] == $value){
-               unset($array[$subKey]);
-          }
-     }
-     return $array;
 }
 
 
-function getUserById(PDO $pdo, $id=null) {
+function getUserById(PDO $pdo, $id = false) {
 	if ($id) {
 		$stmt = $pdo->prepare("SELECT * FROM users WHERE id=:id LIMIT 1");
 		$stmt->bindValue(":id", $id, PDO::PARAM_INT);
@@ -72,9 +56,10 @@ function getUserById(PDO $pdo, $id=null) {
 			return false;
 		}
 	}
+
 	return false;
 }
-function getUserByName(PDO $pdo, $username=null) {
+function getUserByName(PDO $pdo, $username = false) {
 	if ($username) {
 		$stmt = $pdo->prepare("SELECT * FROM users WHERE username=:username LIMIT 1");
 		$stmt->bindValue(":username", $username, PDO::PARAM_STR);
@@ -86,80 +71,91 @@ function getUserByName(PDO $pdo, $username=null) {
 			return false;
 		}
 	}
+
 	return false;
 }
-function addUser(PDO $pdo, $username, $password) {
+function addUser(PDO $pdo, $username = false, $password = false) {
 
-	$displayname = strtoupper('Mr. ' . $username);
+	if ($username && $password) {
+		$displayname = strtoupper('Mr. ' . $username);
 
-	$pdo->beginTransaction();
-	$stmt = $pdo->prepare("INSERT INTO users (username, password, displayname, webauthnkeys) VALUES (:username, :password, :displayname, :webauthnkeys)");
-	$stmt->bindValue(":username", $username);
-	$stmt->bindValue(":password", $password);
-	$stmt->bindValue(":displayname", $displayname);
-	$stmt->bindValue(":webauthnkeys", '');
-	$stmt->execute();
-	$id = $pdo->lastInsertId();
-	$pdo->commit();
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("INSERT INTO users (username, password, displayname, webauthnkeys) VALUES (:username, :password, :displayname, :webauthnkeys)");
+		$stmt->bindValue(":username", $username);
+		$stmt->bindValue(":password", $password);
+		$stmt->bindValue(":displayname", $displayname);
+		$stmt->bindValue(":webauthnkeys", '');
+		$stmt->execute();
+		$id = $pdo->lastInsertId();
+		$pdo->commit();
 
-	return (object) [
-		'id' => $id,
-		'username' => $username,
-		'displayname' => $displayname,
-		'webauthnkeys' => ''
-	];
+		return (object) [
+			'id' => $id,
+			'username' => $username,
+			'displayname' => $displayname,
+			'webauthnkeys' => ''
+		];
+	}
+
+	return false;
 }
-function setKey(PDO $pdo, $user, $webauthnkeys) {
+function setKey(PDO $pdo, $user = false, $webauthnkeys = false) {
 
-	$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
-	$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
-	$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
-	$stmt->execute();
-
-	$count = $stmt->rowCount();
-	if ($count > 0) {
-		return true;
+	if ($user && $webauthnkeys) {
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
+		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+		$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
+		$stmt->execute();
+		$count = $stmt->rowCount();
+		$pdo->commit();
+		if ($count > 0) {
+			return true;
+		}
 	}
 	return false;
 }
-function removeKey(PDO $pdo, $user, $keyhash) {
+function removeKey(PDO $pdo, $user = false, $keyhash = false) {
 
-	$keys = json_decode($user->webauthnkeys, true);
-	$webauthnkeys = json_encode( removeElementWithValue($keys, "keyhash", $keyhash) );
+	if ($user && $keyhash) {
+		$keys = json_decode($user->webauthnkeys, true);
+		$webauthnkeys = json_encode( removeElementWithValue($keys, "keyhash", $keyhash) );
 
-	$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
-	$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
-	$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
-	$stmt->execute();
-
-	$count = $stmt->rowCount();
-	if ($count > 0) {
-		return true;
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
+		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+		$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
+		$stmt->execute();
+		$count = $stmt->rowCount();
+		$pdo->commit();
+		if ($count > 0) {
+			return true;
+		}
 	}
+
 	return false;
 }
+function createToken(PDO $pdo, $userid = false) {
 
+	if ($userid) {
+		$str = $userid . time() . bin2hex(random_bytes(10));
+		$selector = base64_encode(hash('sha384', $str));
+		$validator = bin2hex(random_bytes(20));
+		$hashedvalidator = hash('sha384', $validator, false);
+		$expires = time() + 30*24*60*60;
+		$pdo->beginTransaction();
+		$stmt = $pdo->prepare("INSERT INTO auth_tokens (selector, hashedvalidator, userid, expires) VALUES (:selector, :hashedvalidator, :userid, :expires)");
+		$stmt->bindValue(":selector", $selector, PDO::PARAM_STR);
+		$stmt->bindValue(":hashedvalidator", $hashedvalidator , PDO::PARAM_STR);
+		$stmt->bindValue(":userid", $userid, PDO::PARAM_INT);
+		$stmt->bindValue(":expires", $expires, PDO::PARAM_INT);
+		$stmt->execute();
+		$pdo->commit();
 
+		return $selector .":". $validator;
+	}
 
-function createToken(PDO $pdo, $userid) {
-
-	$str = $userid . time() . bin2hex(random_bytes(10));
-	
-	$selector = base64_encode(hash('sha384', $str));
-	$validator = bin2hex(random_bytes(20));
-
-	$hashedvalidator = hash('sha384', $validator, false);
-	$expires = time() + 30*24*60*60;
-
-	$pdo->beginTransaction();
-	$stmt = $pdo->prepare("INSERT INTO auth_tokens (selector, hashedvalidator, userid, expires) VALUES (:selector, :hashedvalidator, :userid, :expires)");
-	$stmt->bindValue(":selector", $selector, PDO::PARAM_STR);
-	$stmt->bindValue(":hashedvalidator", $hashedvalidator , PDO::PARAM_STR);
-	$stmt->bindValue(":userid", $userid, PDO::PARAM_INT);
-	$stmt->bindValue(":expires", $expires, PDO::PARAM_INT);
-	$stmt->execute();
-	$pdo->commit();
-	return $selector .":". $validator;
+	return false;
 }
 function checkToken(PDO $pdo, $token = false) {
 
@@ -180,8 +176,11 @@ function checkToken(PDO $pdo, $token = false) {
 			return false;
 		}
 	}
+
 	return false;
 }
+
+
 function oops($s, $code = 400){
 
 	$json = [
@@ -196,25 +195,54 @@ function oops($s, $code = 400){
 	echo json_encode($json);
 	exit;
 }
+function logger($title, $log_msg="") {
+    $log_file_data = 'log_' . date('d-M-Y') . '.log';
+    if (SYS_DEBUG) {
+		file_put_contents($log_file_data, "[". date("Y-m-d H:i:s") ."]	". $title . "	". $log_msg . "\n", FILE_APPEND);
+    }
+}
+function removeElementWithValue($array, $key, $value){
+    foreach($array as $subKey => $subArray){
+    	if($subArray[$key] == $value) {
+    		unset($array[$subKey]);
+    	}
+    }
+
+	return $array;
+}
 
 // ############################################################################
-session_name("user_session");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 session_start();
 
-$_SESSION['logged'] = isset($_SESSION['logged']) ?: false;
-$_SESSION['userid'] = isset($_SESSION['userid']) ?: false;
-$_SESSION['attempt_failed'] = isset($_SESSION['attempt_failed']) ?: 0;
-$_SESSION['attempt_ts'] = isset($_SESSION['attempt_ts']) ?: 0;
+$_SESSION['logged'] = $_SESSION['logged'] ?? false;
+$_SESSION['userid'] = $_SESSION['userid'] ?? false;
+$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] ?? 0;
+$_SESSION['attempt_ts'] = $_SESSION['attempt_ts'] ?? 0;
 
+$pdo = EstablishDBCon();
 
 // $backupFile = '/home/domain/private_data/webauthn_users.sqlite3';
 /* A post is an ajax request, otherwise display the page */
 if (! empty($_POST['action'])) {
-	$action = $_POST['action'];
-	define('ACTION', $action);
+	define('ACTION', $_POST['action']);
+
 	try {
 		$webauthn = new davidearl\webauthn\WebAuthn($_SERVER['HTTP_HOST']);
-		switch($action){
+		switch($_POST['action']){
 
 /***
  *    ██████╗ ███████╗ ██████╗ ██╗███████╗████████╗███████╗██████╗       ██╗   ██╗███████╗███████╗██████╗ 
@@ -227,19 +255,19 @@ if (! empty($_POST['action'])) {
  */
 
 			case "register-user":
-				$username = ($_POST['username']) ?  $_POST['username'] : '';
-				$password = ($_POST['password']) ?  $_POST['password'] : '';
+				$username = $_POST['username'] ?? '';
+				$password = $_POST['password'] ?? '';
 
 				if (empty($username)) {
 					oops("userName is empty ");
+				}
+				if (empty($password) OR strlen($password) < 2) {
+					oops("password is empty or too short (2 chars) ");
 				}
 				$row = getUserByName($pdo, $username);
 				if ($row) {
 					oops("user <b>{$username}</b> already exists");
 				}				
-				if (empty($password) OR strlen($password) < 2) {
-					oops("password is empty or too short (2 chars) ");
-				}
 				$hashedPassword = password_hash(
 					base64_encode(
 						hash('sha384', $password, true)
@@ -253,7 +281,7 @@ if (! empty($_POST['action'])) {
 				$json = [
 				    'method' => 'register-user',
 				    'data'=> [
-				        'message' => "${username} is registered & logged",
+				        'message' => "Registration successful <br> Welcome <b>${username}</b>",
 				    	'username' => $user->username,
 				    ]
 				];
@@ -272,21 +300,34 @@ if (! empty($_POST['action'])) {
 
 			case "login-challenge":
 				/* initiate the login */
-				$username = $_POST['username'];
-				$password = $_POST['password'];
+				$username = $_POST['username'] ?? '';
+				$password = $_POST['password'] ?? '';
+
+				if (empty($username)) {
+					oops("userName is empty ");
+				}
+				if (empty($password) OR strlen($password) < 2) {
+					oops("password is empty or too short (2 chars) ");
+				}
 
 				if ($_SESSION['attempt_failed'] > 6) {
-					http_response_code(403);
-					echo ("too many tries. Access denied");
-					exit;
+					oops("too many tries. Access denied", 403);
 				}
-				$last_attempt_in_sec = time() - $_SESSION['attempt_ts'];
-				if ( $last_attempt_in_sec < (5 * $_SESSION['attempt_failed']) )  { // 5 sec * each try
+				if ( (time()-$_SESSION['attempt_ts']) < (5*$_SESSION['attempt_failed']) )  { // 5 sec * each try
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
+
 					oops("Stop spamming!<br> You need to wait ". (5 * $_SESSION['attempt_failed']) . " seconds before next try.");
 				}
+
+				// CHECK username
 				$user = getUserByName($pdo, $username);
+				if (! $user) {
+					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
+					$_SESSION['attempt_ts'] = time();
+
+					oops("Login failed. Please check your username and password", 401);
+				}
 				//  AND password
 				if (password_verify(
 					    base64_encode(
@@ -295,11 +336,12 @@ if (! empty($_POST['action'])) {
 					    $user->password
 					)) { // success :)
 
-					$webauthnkeys = json_decode($user->webauthnkeys);
 					// Key Authentication required?
+					$webauthnkeys = json_decode($user->webauthnkeys);
 					if (!empty($webauthnkeys)) { // YES
-						$challenge = $webauthn->prepare_for_login($user->webauthnkeys);
 						$_SESSION['attempt_userid'] = $user->id;
+
+						$challenge = $webauthn->prepare_for_login($user->webauthnkeys);
 						$json = [
 						    'method' => 'login-challenge',
 						    'data'=> [
@@ -311,6 +353,10 @@ if (! empty($_POST['action'])) {
 						$_SESSION['logged'] = true;
 						$_SESSION['username'] = $user->username;
 						$_SESSION['userid'] = $user->id;
+						unset($_SESSION['attempt_failed']);
+						unset($_SESSION['attempt_ts']);
+						setcookie("logged", true, 0, "/");
+
 						if ($_POST['rememberme']) {							
 							$r_token = createToken($pdo, $user->id);
 							setcookie("r_token", $r_token, time()+(30*24*60*60), "/");
@@ -320,12 +366,15 @@ if (! empty($_POST['action'])) {
 						    'data'=> [
 						        'logged' => true,
 						        'challenge' => false,
+						        'username' => $user->username,
 						    ]
 						];
 					}
 				} else { // password_verify() failed :(
 					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
 					$_SESSION['attempt_ts'] = time();
+
+					oops("Login failed. Please check your username and password", 401);
 				}
 				break;
 
@@ -342,17 +391,26 @@ if (! empty($_POST['action'])) {
 			case "login-authenticate":
 				/* authenticate the login */
 				if (empty($_SESSION['attempt_userid'])) {
+					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
+
 					oops('login attempt failed. Initical credentials failed.');
 				}
 				$attempt_userid = $_SESSION['attempt_userid'];
 				$attempt_keyinfo = $_POST['keyinfo'];
 				$user = getUserById($pdo, $attempt_userid);
 				if (! $webauthn->authenticate($attempt_keyinfo, $user->webauthnkeys)) {
+					$_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] + 1;
+					$_SESSION['attempt_ts'] = time();
+
 					oops('Key invalid', 401);
 				} else { // Key is OK
 					$_SESSION['logged'] = true;
 					$_SESSION['userid'] = $user->id;
 					$_SESSION['username'] = $user->username;
+					unset($_SESSION['attempt_failed']);
+					unset($_SESSION['attempt_ts']);
+					setcookie("logged", true, 0, "/");
+
 					if ($_POST['rememberme']) {
 						$r_token = createToken($pdo, $user->id);
 						setcookie("r_token", $r_token, time()+(30*24*60*60), "/");
@@ -375,6 +433,12 @@ if (! empty($_POST['action'])) {
 
 
 
+
+
+
+
+
+
 /***
  *    ██████╗ ███████╗ ██████╗ ██╗███████╗████████╗███████╗██████╗        ██████╗██╗  ██╗ █████╗ ██╗     ██╗     ███████╗███╗   ██╗ ██████╗ ███████╗
  *    ██╔══██╗██╔════╝██╔════╝ ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗      ██╔════╝██║  ██║██╔══██╗██║     ██║     ██╔════╝████╗  ██║██╔════╝ ██╔════╝
@@ -386,7 +450,7 @@ if (! empty($_POST['action'])) {
  */
 
 			case "register-challenge":
-				if(!$_SESSION['logged']) {
+				if(!$_SESSION['logged'] OR !$_SESSION['userid']) {
 					oops("Please login first", 401);
 				}
 				if($_POST['keyname'] =="") {
@@ -418,11 +482,11 @@ if (! empty($_POST['action'])) {
 				if(!$_SESSION['logged'] OR !$_SESSION['userid']) {
 					oops("Please login first", 401);
 				}
-				$keyname = $_POST['keyname'];
+				$keyname = $_POST['keyname'] ?? '';
 				if(!$keyname) {
 					oops("Key need a name");
 				}
-				$keyinfo = $_POST['keyinfo'];
+				$keyinfo = $_POST['keyinfo'] ?? '';
 				if(!$keyinfo) {
 					oops("keyinfo is missing");
 				}
@@ -472,10 +536,7 @@ if (! empty($_POST['action'])) {
 				if(!$_SESSION['logged'] OR !$_SESSION['userid']) {
 					oops("Please login first", 401);
 				}
-
 				$user = getUserById($pdo, $_SESSION['userid']);
-
-				// $json['keys'] = json_decode($user->webauthnkeys);
 				$json = [
 				    'method' => 'key-list',
 				    'data'=> [
@@ -500,8 +561,7 @@ if (! empty($_POST['action'])) {
 				}
 				$keyhash = $_POST['keyhash'];
 				$user = getUserById($pdo, $_SESSION['userid']);
-				removeKey($pdo, $user, $keyhash);
-				
+				removeKey($pdo, $user, $keyhash);				
 				$json = [
 				    'method' => 'key-delete',
 				    'data'=> [
@@ -521,24 +581,41 @@ if (! empty($_POST['action'])) {
  */
 
 			case "check-token":
-				$token = $_COOKIE['r_token'];
-				$token = urldecode($token);
-				
+				$token = urldecode($_COOKIE['r_token']);
 				$userid = checkToken($pdo, $token);
-				$user = getUserById($pdo, $userid);
-				if ($user) {
-					$_SESSION['logged'] = true;
-					$_SESSION['userid'] = $user->id;
-					$json = [
-					    'method' => 'check-token',
-					    'data'=> [
-					        'message' => "Welcome back " . $user->displayname
-					    ]
-					];
+				if ($userid) {
+					$user = getUserById($pdo, $userid);	
+					if ($user) {
+						$_SESSION['logged'] = true;
+						$_SESSION['userid'] = $user->id;
+						setcookie("logged", true, 0, "/");
+						
+						$json = [
+						    'method' => 'check-token',
+						    'data'=> [
+						        'message' => "Welcome back " . $user->displayname
+						    ]
+						];
+					} else {
+						oops("Invalid Cookie");
+					}
 				} else {
 					oops("Invalid Cookie");
 				}
 				break;
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /***
@@ -552,7 +629,8 @@ if (! empty($_POST['action'])) {
  */
 
 			case "logout":
-				session_destroy();
+				$_SESSION['logged'] = false;
+				unset($_SESSION['userid']);
 				$json = [
 				    'method' => 'logout',
 				    'data'=> [
@@ -571,19 +649,16 @@ if (! empty($_POST['action'])) {
  *                                                              
  */
 			default:
-				oops("unrecognized POST\n", 405);
+				oops("unrecognized action", 405);
 				break;
 		}    
-
 	} catch(Exception $ex) {
 		logger("Exception: ". json_encode($ex) );
 		oops($ex->getMessage());
 	}
-
 	$pdo = null;
 
 	header('Content-type: application/json');
-	// http_response_code(200);
 	echo json_encode($json);
 	exit;
 }

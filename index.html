@@ -116,8 +116,8 @@
 
 
 <!-- Flexbox container for aligning the toasts -->
-<div aria-live="polite" aria-atomic="true" style="position:relative; min-height:200px;">
-	<div style="position:fixed; top:10px; right:10px;">
+<div aria-live="polite" aria-atomic="true" style="position:relative; min-height:250px;">
+	<div style="position:fixed; top:10px; right:10px;  min-width: 300px;">
 		<div class="toast" id="notification-toast" role="alert" aria-live="assertive" aria-atomic="true">
 			<div class="toast-header">
 				<span class="toast-badge m-1">
@@ -323,7 +323,7 @@ $(function(){
 					});	
 				}
 				if (resp.data.logged) {
-					showToast("success", 'Login success');
+					showToast("success", `Login success. Welcome back <b>${resp.data.username}</b> `);
 				}
 			},		
 			error: function(xhr, status, error){
@@ -354,7 +354,7 @@ $(function(){
 			},
 			dataType: "json",
 			success: function(resp){
-				showToast("danger", "You logged out");
+				showToast("info", "You logged out");
 			},
 			error: function(xhr, status, error){
 				showToast("danger", xhr.responseJSON);
@@ -460,13 +460,11 @@ $(function(){
 				let html = "";
 				let keys = resp.data.keys;
 				if (resp.data.keys) {
-					if (resp.data.keys.length > 0){
-				  		for (let i=0; i<keys.length; i++) {
-				  			html += `<tr data-key-hash="${keys[i]['keyhash']}"><td> ` + keys[i]['keyname'] + `</td><td> <button type="button" class="js-key-delete btn btn-danger btn-sm"  data-key-hash="${keys[i]['keyhash']}">delete</button> </td></tr>`;
-				  		}
-					} else {
-			  			showToast("info", "No key found");
+			  		for (let i=0; i<keys.length; i++) {
+			  			html += `<tr data-key-hash="${keys[i]['keyhash']}"><td> ` + keys[i]['keyname'] + `</td><td> <button type="button" class="js-key-delete btn btn-danger btn-sm"  data-key-hash="${keys[i]['keyhash']}">delete</button> </td></tr>`;
 			  		}
+				} else {
+					showToast("info", "No key found");
 				}
 		  		$("#key-list").html(html);
 			},
@@ -521,10 +519,9 @@ $(function(){
  *     ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝
  *                                                 
  */
-let token = Cookies.get('r_token');
-let sid = Cookies.get('user_session');
-if (typeof(token) != "undefined" && typeof(sid) == "undefined") {
-// if (typeof(token) != "undefined") {
+let r_token = Cookies.get('r_token');
+let logged = Cookies.get('logged');
+if (typeof(r_token) != "undefined" && typeof(logged) == "undefined") {
 	$.ajax({
 		url: "server.php",
 		method: "POST",
