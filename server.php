@@ -30,17 +30,17 @@ function EstablishDBCon() {
 			"webauthnkeys" TEXT,
 			"failed_login_attempts" INTEGER DEFAULT 0,
 			"failed_login_ts" INTEGER,
-			"lastlogin_on" TEXT,
-			"created_on" TEXT
+			"lastlogin_on" INTEGER,
+			"created_on" INTEGER
 		)');
 
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "auth_tokens" (
 			"id" INTEGER PRIMARY KEY,
-			"selector" TEXT UNIQUE,
+			"selector" TEXT,
 			"hashedvalidator" TEXT,
 			"userid" INTEGER,
 			"expires" INTEGER,
-			"created_on" TEXT
+			"created_on" INTEGER
 		)');
 
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "login_attempts" (
@@ -49,8 +49,7 @@ function EstablishDBCon() {
 			"reason" TEXT,
 			"agent" TEXT,
 			"ip" TEXT,
-			"ts" INTEGER,
-			"created_on" TEXT
+			"created_on" INTEGER
 		)');
 		
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `username` ON `users` (`username` ASC)');
@@ -111,8 +110,8 @@ function addUser(PDO $pdo, $username = false, $password = false) {
 			$stmt->bindValue(":password", $password, PDO::PARAM_STR);
 			$stmt->bindValue(":displayname", $displayname, PDO::PARAM_STR);
 			$stmt->bindValue(":webauthnkeys", '', PDO::PARAM_STR);
-			$stmt->bindValue(":lastlogin_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
-			$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->bindValue(":lastlogin_on", time(), PDO::PARAM_INT);
+			$stmt->bindValue(":created_on", time(), PDO::PARAM_INT);
 			$stmt->execute();
 			$id = $pdo->lastInsertId();
 			$pdo->commit();
@@ -138,13 +137,12 @@ function addFailedLogAttempt(PDO $pdo, $username = false, $reason = "") {
 		$agent = new CI_User_agent();
 		try {
 			$pdo->beginTransaction();
-			$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, ts, created_on) VALUES (:username, :reason, :ip, :agent, :ts, :created_on)");
+			$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, created_on) VALUES (:username, :reason, :ip, :agent, :created_on)");
 			$stmt->bindValue(":username", $username, PDO::PARAM_STR);
 			$stmt->bindValue(":reason", $reason, PDO::PARAM_STR);
 			$stmt->bindValue(":ip", $ip, PDO::PARAM_STR);
 			$stmt->bindValue(":agent", $agent->agent_string(), PDO::PARAM_STR);
-			$stmt->bindValue(":ts", time(), PDO::PARAM_INT);
-			$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->bindValue(":created_on", time(), PDO::PARAM_INT);
 			$stmt->execute();
 			$pdo->commit();
 		} catch (Exception $e) {
@@ -164,7 +162,7 @@ function setUserSuccessfulLogin(PDO $pdo, $user = false) {
 			$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
 			$stmt->bindValue(":failed_login_attempts", 0, PDO::PARAM_INT);
 			$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
-			$stmt->bindValue(":lastlogin_on",  date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->bindValue(":lastlogin_on",  time(), PDO::PARAM_STR);
 			$stmt->execute();
 			$count = $stmt->rowCount();
 			$pdo->commit();
@@ -263,7 +261,7 @@ function createToken(PDO $pdo, $userid = false) {
 			$stmt->bindValue(":hashedvalidator", $hashedvalidator , PDO::PARAM_STR);
 			$stmt->bindValue(":userid", $userid, PDO::PARAM_INT);
 			$stmt->bindValue(":expires", $expires, PDO::PARAM_INT);
-			$stmt->bindValue(":created_on", date("Y-m-d H:i:s") ,PDO::PARAM_STR);
+			$stmt->bindValue(":created_on", time(), PDO::PARAM_INT);
 			$stmt->execute();
 			$pdo->commit();
 		} catch (Exception $e) {
