@@ -36,7 +36,7 @@ function EstablishDBCon() {
 
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "auth_tokens" (
 			"id" INTEGER PRIMARY KEY,
-			"selector" TEXT,
+			"selector" TEXT UNIQUE,
 			"hashedvalidator" TEXT,
 			"userid" INTEGER,
 			"expires" INTEGER,
