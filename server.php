@@ -23,7 +23,7 @@ function EstablishDBCon() {
 		$pdo = new PDO('sqlite:database/users.sqlite3');
 		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "users" (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE ,
+			"id" INTEGER PRIMARY KEY,
 			"username" TEXT UNIQUE,
 			"password" TEXT,
 			"displayname" TEXT,
@@ -35,7 +35,7 @@ function EstablishDBCon() {
 		)');
 
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "auth_tokens" (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE ,
+			"id" INTEGER PRIMARY KEY,
 			"selector" TEXT,
 			"hashedvalidator" TEXT,
 			"userid" INTEGER,
@@ -44,7 +44,7 @@ function EstablishDBCon() {
 		)');
 
 		$pdo->exec('CREATE TABLE IF NOT EXISTS "login_attempts" (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE ,
+			"id" INTEGER PRIMARY KEY,
 			"username" TEXT,
 			"reason" TEXT,
 			"agent" TEXT,
@@ -56,7 +56,9 @@ function EstablishDBCon() {
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `username` ON `users` (`username` ASC)');
 		$pdo->exec('CREATE INDEX IF NOT EXISTS `selector` ON `auth_tokens` ( `selector` ASC)');
     } catch (Exception $e) {
-       logger('db connect', json_encode($e));
+    	$pdo->rollback();
+    	throw $e;
+    	logger('db connect', json_encode($e));
     }
 
     return $pdo;
@@ -102,17 +104,22 @@ function addUser(PDO $pdo, $username = false, $password = false) {
 
 	if ($username && $password) {
 		$displayname = strtoupper('Mr. ' . $username);
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("INSERT INTO users (username, password, displayname, webauthnkeys, lastlogin_on, created_on) VALUES (:username, :password, :displayname, :webauthnkeys, :lastlogin_on, :created_on)");
-		$stmt->bindValue(":username", $username, PDO::PARAM_STR);
-		$stmt->bindValue(":password", $password, PDO::PARAM_STR);
-		$stmt->bindValue(":displayname", $displayname, PDO::PARAM_STR);
-		$stmt->bindValue(":webauthnkeys", '', PDO::PARAM_STR);
-		$stmt->bindValue(":lastlogin_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
-		$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
-		$stmt->execute();
-		$id = $pdo->lastInsertId();
-		$pdo->commit();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("INSERT INTO users (username, password, displayname, webauthnkeys, lastlogin_on, created_on) VALUES (:username, :password, :displayname, :webauthnkeys, :lastlogin_on, :created_on)");
+			$stmt->bindValue(":username", $username, PDO::PARAM_STR);
+			$stmt->bindValue(":password", $password, PDO::PARAM_STR);
+			$stmt->bindValue(":displayname", $displayname, PDO::PARAM_STR);
+			$stmt->bindValue(":webauthnkeys", '', PDO::PARAM_STR);
+			$stmt->bindValue(":lastlogin_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->execute();
+			$id = $pdo->lastInsertId();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}
 
 		return (object) [
 			'id' => $id,
@@ -129,17 +136,21 @@ function addFailedLogAttempt(PDO $pdo, $username = false, $reason = "") {
 	if ($username) {
 		$ip = $_SERVER['REMOTE_ADDR'];
 		$agent = new CI_User_agent();
-
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, ts, created_on) VALUES (:username, :reason, :ip, :agent, :ts, :created_on)");
-		$stmt->bindValue(":username", $username, PDO::PARAM_STR);
-		$stmt->bindValue(":reason", $reason, PDO::PARAM_STR);
-		$stmt->bindValue(":ip", $ip, PDO::PARAM_STR);
-		$stmt->bindValue(":agent", $agent->agent_string(), PDO::PARAM_STR);
-		$stmt->bindValue(":ts", time(), PDO::PARAM_INT);
-		$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
-		$stmt->execute();
-		$pdo->commit();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, ts, created_on) VALUES (:username, :reason, :ip, :agent, :ts, :created_on)");
+			$stmt->bindValue(":username", $username, PDO::PARAM_STR);
+			$stmt->bindValue(":reason", $reason, PDO::PARAM_STR);
+			$stmt->bindValue(":ip", $ip, PDO::PARAM_STR);
+			$stmt->bindValue(":agent", $agent->agent_string(), PDO::PARAM_STR);
+			$stmt->bindValue(":ts", time(), PDO::PARAM_INT);
+			$stmt->bindValue(":created_on", date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->execute();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}
 		return true;
 	}
 	return false;
@@ -147,15 +158,20 @@ function addFailedLogAttempt(PDO $pdo, $username = false, $reason = "") {
 function setUserSuccessfulLogin(PDO $pdo, $user = false) {
 
 	if ($user) {
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("UPDATE users SET failed_login_attempts=:failed_login_attempts, failed_login_ts=:failed_login_ts, lastlogin_on=:lastlogin_on WHERE id=:id");
-		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
-		$stmt->bindValue(":failed_login_attempts", 0, PDO::PARAM_INT);
-		$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
-		$stmt->bindValue(":lastlogin_on",  date("Y-m-d H:i:s"), PDO::PARAM_STR);
-		$stmt->execute();
-		$count = $stmt->rowCount();
-		$pdo->commit();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("UPDATE users SET failed_login_attempts=:failed_login_attempts, failed_login_ts=:failed_login_ts, lastlogin_on=:lastlogin_on WHERE id=:id");
+			$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+			$stmt->bindValue(":failed_login_attempts", 0, PDO::PARAM_INT);
+			$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
+			$stmt->bindValue(":lastlogin_on",  date("Y-m-d H:i:s"), PDO::PARAM_STR);
+			$stmt->execute();
+			$count = $stmt->rowCount();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;			
+		}
 		if ($count > 0) {
 			return true;
 		}
@@ -166,14 +182,19 @@ function setUserSuccessfulLogin(PDO $pdo, $user = false) {
 function setUserFailedLogin(PDO $pdo, $user = false) {
 
 	if ($user) {
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("UPDATE users SET failed_login_attempts=:failed_login_attempts , failed_login_ts=:failed_login_ts WHERE id=:id");
-		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
-		$stmt->bindValue(":failed_login_attempts", ($user->failed_login_attempts + 1), PDO::PARAM_INT);
-		$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
-		$stmt->execute();
-		$count = $stmt->rowCount();
-		$pdo->commit();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("UPDATE users SET failed_login_attempts=:failed_login_attempts , failed_login_ts=:failed_login_ts WHERE id=:id");
+			$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+			$stmt->bindValue(":failed_login_attempts", ($user->failed_login_attempts + 1), PDO::PARAM_INT);
+			$stmt->bindValue(":failed_login_ts", time(), PDO::PARAM_INT);
+			$stmt->execute();
+			$count = $stmt->rowCount();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}
 		if ($count > 0) {
 			return true;
 		}
@@ -184,13 +205,18 @@ function setUserFailedLogin(PDO $pdo, $user = false) {
 function setKey(PDO $pdo, $user = false, $webauthnkeys = false) {
 
 	if ($user && $webauthnkeys) {
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
-		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
-		$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
-		$stmt->execute();
-		$count = $stmt->rowCount();
-		$pdo->commit();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
+			$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+			$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
+			$stmt->execute();
+			$count = $stmt->rowCount();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}
 		if ($count > 0) {
 			return true;
 		}
@@ -203,19 +229,22 @@ function removeKey(PDO $pdo, $user = false, $keyhash = false) {
 	if ($user && $keyhash) {
 		$keys = json_decode($user->webauthnkeys, true);
 		$webauthnkeys = json_encode( removeElementWithValue($keys, "keyhash", $keyhash) );
-
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
-		$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
-		$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
-		$stmt->execute();
-		$count = $stmt->rowCount();
-		$pdo->commit();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("UPDATE users SET webauthnkeys=:webauthnkeys WHERE id=:id");
+			$stmt->bindValue(":id", $user->id, PDO::PARAM_INT);
+			$stmt->bindValue(":webauthnkeys", $webauthnkeys , PDO::PARAM_STR);
+			$stmt->execute();
+			$count = $stmt->rowCount();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}
 		if ($count > 0) {
 			return true;
 		}
 	}
-
 	return false;
 }
 
@@ -227,19 +256,22 @@ function createToken(PDO $pdo, $userid = false) {
 		$validator = bin2hex(random_bytes(20));
 		$hashedvalidator = hash('sha384', $validator, false);
 		$expires = time() + 30*24*60*60;
-		$pdo->beginTransaction();
-		$stmt = $pdo->prepare("INSERT INTO auth_tokens (selector, hashedvalidator, userid, expires, created_on) VALUES (:selector, :hashedvalidator, :userid, :expires, :created_on)");
-		$stmt->bindValue(":selector", $selector, PDO::PARAM_STR);
-		$stmt->bindValue(":hashedvalidator", $hashedvalidator , PDO::PARAM_STR);
-		$stmt->bindValue(":userid", $userid, PDO::PARAM_INT);
-		$stmt->bindValue(":expires", $expires, PDO::PARAM_INT);
-		$stmt->bindValue(":created_on", date("Y-m-d H:i:s") ,PDO::PARAM_STR);
-		$stmt->execute();
-		$pdo->commit();
-
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("INSERT INTO auth_tokens (selector, hashedvalidator, userid, expires, created_on) VALUES (:selector, :hashedvalidator, :userid, :expires, :created_on)");
+			$stmt->bindValue(":selector", $selector, PDO::PARAM_STR);
+			$stmt->bindValue(":hashedvalidator", $hashedvalidator , PDO::PARAM_STR);
+			$stmt->bindValue(":userid", $userid, PDO::PARAM_INT);
+			$stmt->bindValue(":expires", $expires, PDO::PARAM_INT);
+			$stmt->bindValue(":created_on", date("Y-m-d H:i:s") ,PDO::PARAM_STR);
+			$stmt->execute();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}		
 		return $selector .":". $validator;
 	}
-
 	return false;
 }
 
