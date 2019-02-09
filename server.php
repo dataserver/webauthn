@@ -16,7 +16,22 @@ include_once('CBOREncode/src/CBOR/CBOREncoder.php');
 include_once('CBOREncode/src/CBOR/Types/CBORByteString.php');
 include_once('CBOREncode/src/CBOR/CBORExceptions.php');
 
-function EstablishDBCon() {
+
+/***
+ *         888 888                                                                  888    
+ *         888 888                                                                  888    
+ *         888 888                                                                  888    
+ *     .d88888 88888b.         .d8888b  .d88b.  88888b.  88888b.   .d88b.   .d8888b 888888 
+ *    d88" 888 888 "88b       d88P"    d88""88b 888 "88b 888 "88b d8P  Y8b d88P"    888    
+ *    888  888 888  888       888      888  888 888  888 888  888 88888888 888      888    
+ *    Y88b 888 888 d88P       Y88b.    Y88..88P 888  888 888  888 Y8b.     Y88b.    Y88b.  
+ *     "Y88888 88888P"         "Y8888P  "Y88P"  888  888 888  888  "Y8888   "Y8888P  "Y888 
+ *                                                                                         
+ *                                                                                         
+ *                                                                                         
+ */
+
+function dbConnect() {
 
     $pdo = false;
     try{ 
@@ -64,6 +79,20 @@ function EstablishDBCon() {
 }
 
 
+/***
+ *                      888                                             
+ *                      888                                             
+ *                      888                                             
+ *     .d88b.   .d88b.  888888       888  888 .d8888b   .d88b.  888d888 
+ *    d88P"88b d8P  Y8b 888          888  888 88K      d8P  Y8b 888P"   
+ *    888  888 88888888 888          888  888 "Y8888b. 88888888 888     
+ *    Y88b 888 Y8b.     Y88b.        Y88b 888      X88 Y8b.     888     
+ *     "Y88888  "Y8888   "Y888        "Y88888  88888P'  "Y8888  888     
+ *         888                                                          
+ *    Y8b d88P                                                          
+ *     "Y88P"                                                           
+ */
+
 
 function getUserById(PDO $pdo, $id = false) {
 
@@ -99,6 +128,22 @@ function getUserByName(PDO $pdo, $username = false) {
 	return false;
 }
 
+
+/***
+ *                  888      888                                          
+ *                  888      888                                          
+ *                  888      888                                          
+ *     8888b.   .d88888  .d88888       888  888 .d8888b   .d88b.  888d888 
+ *        "88b d88" 888 d88" 888       888  888 88K      d8P  Y8b 888P"   
+ *    .d888888 888  888 888  888       888  888 "Y8888b. 88888888 888     
+ *    888  888 Y88b 888 Y88b 888       Y88b 888      X88 Y8b.     888     
+ *    "Y888888  "Y88888  "Y88888        "Y88888  88888P'  "Y8888  888     
+ *                                                                        
+ *                                                                        
+ *                                                                        
+ */
+
+
 function addUser(PDO $pdo, $username = false, $password = false) {
 
 	if ($username && $password) {
@@ -130,29 +175,21 @@ function addUser(PDO $pdo, $username = false, $password = false) {
 
 	return false;
 }
-function addFailedLogAttempt(PDO $pdo, $username = false, $reason = "") {
 
-	if ($username) {
-		$ip = $_SERVER['REMOTE_ADDR'];
-		$agent = new CI_User_agent();
-		try {
-			$pdo->beginTransaction();
-			$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, created_on) VALUES (:username, :reason, :ip, :agent, :created_on)");
-			$stmt->bindValue(":username", $username, PDO::PARAM_STR);
-			$stmt->bindValue(":reason", $reason, PDO::PARAM_STR);
-			$stmt->bindValue(":ip", $ip, PDO::PARAM_STR);
-			$stmt->bindValue(":agent", $agent->agent_string(), PDO::PARAM_STR);
-			$stmt->bindValue(":created_on", time(), PDO::PARAM_INT);
-			$stmt->execute();
-			$pdo->commit();
-		} catch (Exception $e) {
-			$pdo->rollback();
-			return false;
-		}
-		return true;
-	}
-	return false;
-}
+/***
+ *                      888                                                                888                   d8b                                                                               
+ *                      888                                                                888                   Y8P                                                                               
+ *                      888                                                                888                                                                                                     
+ *    .d8888b   .d88b.  888888       888  888 .d8888b   .d88b.  888d888                    888  .d88b.   .d88b.  888 88888b.        .d8888b  888  888  .d8888b  .d8888b  .d88b.  .d8888b  .d8888b  
+ *    88K      d8P  Y8b 888          888  888 88K      d8P  Y8b 888P"                      888 d88""88b d88P"88b 888 888 "88b       88K      888  888 d88P"    d88P"    d8P  Y8b 88K      88K      
+ *    "Y8888b. 88888888 888          888  888 "Y8888b. 88888888 888           888888       888 888  888 888  888 888 888  888       "Y8888b. 888  888 888      888      88888888 "Y8888b. "Y8888b. 
+ *         X88 Y8b.     Y88b.        Y88b 888      X88 Y8b.     888                        888 Y88..88P Y88b 888 888 888  888            X88 Y88b 888 Y88b.    Y88b.    Y8b.          X88      X88 
+ *     88888P'  "Y8888   "Y888        "Y88888  88888P'  "Y8888  888                        888  "Y88P"   "Y88888 888 888  888        88888P'  "Y88888  "Y8888P  "Y8888P  "Y8888   88888P'  88888P' 
+ *                                                                                                           888                                                                                   
+ *                                                                                                      Y8b d88P                                                                                   
+ *                                                                                                       "Y88P"                                                                                    
+ */
+
 function setUserSuccessfulLogin(PDO $pdo, $user = false) {
 
 	if ($user) {
@@ -177,6 +214,20 @@ function setUserSuccessfulLogin(PDO $pdo, $user = false) {
 	return false;
 }
 
+/***
+ *                      888                                                                888                   d8b                 .d888          d8b 888 
+ *                      888                                                                888                   Y8P                d88P"           Y8P 888 
+ *                      888                                                                888                                      888                 888 
+ *    .d8888b   .d88b.  888888       888  888 .d8888b   .d88b.  888d888                    888  .d88b.   .d88b.  888 88888b.        888888  8888b.  888 888 
+ *    88K      d8P  Y8b 888          888  888 88K      d8P  Y8b 888P"                      888 d88""88b d88P"88b 888 888 "88b       888        "88b 888 888 
+ *    "Y8888b. 88888888 888          888  888 "Y8888b. 88888888 888           888888       888 888  888 888  888 888 888  888       888    .d888888 888 888 
+ *         X88 Y8b.     Y88b.        Y88b 888      X88 Y8b.     888                        888 Y88..88P Y88b 888 888 888  888       888    888  888 888 888 
+ *     88888P'  "Y8888   "Y888        "Y88888  88888P'  "Y8888  888                        888  "Y88P"   "Y88888 888 888  888       888    "Y888888 888 888 
+ *                                                                                                           888                                            
+ *                                                                                                      Y8b d88P                                            
+ *                                                                                                       "Y88P"                                             
+ */
+
 function setUserFailedLogin(PDO $pdo, $user = false) {
 
 	if ($user) {
@@ -200,6 +251,59 @@ function setUserFailedLogin(PDO $pdo, $user = false) {
 	return true;
 }
 
+/***
+ *                  888      888                888    888                                    888                        .d888          d8b 888 
+ *                  888      888                888    888                                    888                       d88P"           Y8P 888 
+ *                  888      888                888    888                                    888                       888                 888 
+ *     8888b.   .d88888  .d88888        8888b.  888888 888888  .d88b.  88888b.d88b.  88888b.  888888                    888888  8888b.  888 888 
+ *        "88b d88" 888 d88" 888           "88b 888    888    d8P  Y8b 888 "888 "88b 888 "88b 888                       888        "88b 888 888 
+ *    .d888888 888  888 888  888       .d888888 888    888    88888888 888  888  888 888  888 888          888888       888    .d888888 888 888 
+ *    888  888 Y88b 888 Y88b 888       888  888 Y88b.  Y88b.  Y8b.     888  888  888 888 d88P Y88b.                     888    888  888 888 888 
+ *    "Y888888  "Y88888  "Y88888       "Y888888  "Y888  "Y888  "Y8888  888  888  888 88888P"   "Y888                    888    "Y888888 888 888 
+ *                                                                                   888                                                        
+ *                                                                                   888                                                        
+ *                                                                                   888                                                        
+ */
+
+function addFailedLogAttempt(PDO $pdo, $username = false, $reason = "") {
+
+	if ($username) {
+		$ip = $_SERVER['REMOTE_ADDR'];
+		$agent = new CI_User_agent();
+		try {
+			$pdo->beginTransaction();
+			$stmt = $pdo->prepare("INSERT INTO login_attempts (username, reason, ip, agent, created_on) VALUES (:username, :reason, :ip, :agent, :created_on)");
+			$stmt->bindValue(":username", $username, PDO::PARAM_STR);
+			$stmt->bindValue(":reason", $reason, PDO::PARAM_STR);
+			$stmt->bindValue(":ip", $ip, PDO::PARAM_STR);
+			$stmt->bindValue(":agent", $agent->agent_string(), PDO::PARAM_STR);
+			$stmt->bindValue(":created_on", time(), PDO::PARAM_INT);
+			$stmt->execute();
+			$pdo->commit();
+		} catch (Exception $e) {
+			$pdo->rollback();
+			return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+
+/***
+ *                      888          888                        
+ *                      888          888                        
+ *                      888          888                        
+ *    .d8888b   .d88b.  888888       888  888  .d88b.  888  888 
+ *    88K      d8P  Y8b 888          888 .88P d8P  Y8b 888  888 
+ *    "Y8888b. 88888888 888          888888K  88888888 888  888 
+ *         X88 Y8b.     Y88b.        888 "88b Y8b.     Y88b 888 
+ *     88888P'  "Y8888   "Y888       888  888  "Y8888   "Y88888 
+ *                                                          888 
+ *                                                     Y8b d88P 
+ *                                                      "Y88P"  
+ */
+
 function setKey(PDO $pdo, $user = false, $webauthnkeys = false) {
 
 	if ($user && $webauthnkeys) {
@@ -221,6 +325,21 @@ function setKey(PDO $pdo, $user = false, $webauthnkeys = false) {
 	}
 	return false;
 }
+
+
+/***
+ *                                                                    888                        
+ *                                                                    888                        
+ *                                                                    888                        
+ *    888d888  .d88b.  88888b.d88b.   .d88b.  888  888  .d88b.        888  888  .d88b.  888  888 
+ *    888P"   d8P  Y8b 888 "888 "88b d88""88b 888  888 d8P  Y8b       888 .88P d8P  Y8b 888  888 
+ *    888     88888888 888  888  888 888  888 Y88  88P 88888888       888888K  88888888 888  888 
+ *    888     Y8b.     888  888  888 Y88..88P  Y8bd8P  Y8b.           888 "88b Y8b.     Y88b 888 
+ *    888      "Y8888  888  888  888  "Y88P"    Y88P    "Y8888        888  888  "Y8888   "Y88888 
+ *                                                                                           888 
+ *                                                                                      Y8b d88P 
+ *                                                                                       "Y88P"  
+ */
 
 function removeKey(PDO $pdo, $user = false, $keyhash = false) {
 
@@ -246,7 +365,22 @@ function removeKey(PDO $pdo, $user = false, $keyhash = false) {
 	return false;
 }
 
-function createToken(PDO $pdo, $userid = false) {
+
+/***
+ *                  888      888       888             888                        
+ *                  888      888       888             888                        
+ *                  888      888       888             888                        
+ *     8888b.   .d88888  .d88888       888888  .d88b.  888  888  .d88b.  88888b.  
+ *        "88b d88" 888 d88" 888       888    d88""88b 888 .88P d8P  Y8b 888 "88b 
+ *    .d888888 888  888 888  888       888    888  888 888888K  88888888 888  888 
+ *    888  888 Y88b 888 Y88b 888       Y88b.  Y88..88P 888 "88b Y8b.     888  888 
+ *    "Y888888  "Y88888  "Y88888        "Y888  "Y88P"  888  888  "Y8888  888  888 
+ *                                                                                
+ *                                                                                
+ *                                                                                
+ */
+
+function addToken(PDO $pdo, $userid = false) {
 
 	if ($userid) {
 		$str = $userid . time() . bin2hex(random_bytes(10));
@@ -273,6 +407,20 @@ function createToken(PDO $pdo, $userid = false) {
 	return false;
 }
 
+/***
+ *             888                        888            888             888                        
+ *             888                        888            888             888                        
+ *             888                        888            888             888                        
+ *     .d8888b 88888b.   .d88b.   .d8888b 888  888       888888  .d88b.  888  888  .d88b.  88888b.  
+ *    d88P"    888 "88b d8P  Y8b d88P"    888 .88P       888    d88""88b 888 .88P d8P  Y8b 888 "88b 
+ *    888      888  888 88888888 888      888888K        888    888  888 888888K  88888888 888  888 
+ *    Y88b.    888  888 Y8b.     Y88b.    888 "88b       Y88b.  Y88..88P 888 "88b Y8b.     888  888 
+ *     "Y8888P 888  888  "Y8888   "Y8888P 888  888        "Y888  "Y88P"  888  888  "Y8888  888  888 
+ *                                                                                                  
+ *                                                                                                  
+ *                                                                                                  
+ */
+
 function checkToken(PDO $pdo, $token = false) {
 
 	if ($token && strpos($token, ':') !== false) {
@@ -296,6 +444,20 @@ function checkToken(PDO $pdo, $token = false) {
 	return false;
 }
 
+
+/***
+ *                                               .d888                            888    d8b                   
+ *                                              d88P"                             888    Y8P                   
+ *                                              888                               888                          
+ *     .d88b.   .d88b.  88888b.  .d8888b        888888 888  888 88888b.   .d8888b 888888 888  .d88b.  88888b.  
+ *    d88""88b d88""88b 888 "88b 88K            888    888  888 888 "88b d88P"    888    888 d88""88b 888 "88b 
+ *    888  888 888  888 888  888 "Y8888b.       888    888  888 888  888 888      888    888 888  888 888  888 
+ *    Y88..88P Y88..88P 888 d88P      X88       888    Y88b 888 888  888 Y88b.    Y88b.  888 Y88..88P 888  888 
+ *     "Y88P"   "Y88P"  88888P"   88888P'       888     "Y88888 888  888  "Y8888P  "Y888 888  "Y88P"  888  888 
+ *                      888                                                                                    
+ *                      888                                                                                    
+ *                      888                                                                                    
+ */
 
 
 function oops($s = "", $code = 400){
@@ -322,6 +484,20 @@ function oops($s = "", $code = 400){
 	exit;
 }
 
+/***
+ *    888                                             
+ *    888                                             
+ *    888                                             
+ *    888  .d88b.   .d88b.   .d88b.   .d88b.  888d888 
+ *    888 d88""88b d88P"88b d88P"88b d8P  Y8b 888P"   
+ *    888 888  888 888  888 888  888 88888888 888     
+ *    888 Y88..88P Y88b 888 Y88b 888 Y8b.     888     
+ *    888  "Y88P"   "Y88888  "Y88888  "Y8888  888     
+ *                      888      888                  
+ *                 Y8b d88P Y8b d88P                  
+ *                  "Y88P"   "Y88P"                   
+ */
+
 function logger($title = "", $log_msg = "") {
 
     $log_file_data = 'log_' . date('Y-m-d') . '.log';
@@ -329,6 +505,21 @@ function logger($title = "", $log_msg = "") {
 		file_put_contents($log_file_data, "[". date("Y-m-d H:i:s") ."]	". $title . "	". $log_msg . "\n", FILE_APPEND);
     }
 }
+
+
+/***
+ *    888               888                           
+ *    888               888                           
+ *    888               888                           
+ *    88888b.   .d88b.  888 88888b.   .d88b.  888d888 
+ *    888 "88b d8P  Y8b 888 888 "88b d8P  Y8b 888P"   
+ *    888  888 88888888 888 888  888 88888888 888     
+ *    888  888 Y8b.     888 888 d88P Y8b.     888     
+ *    888  888  "Y8888  888 88888P"   "Y8888  888     
+ *                          888                       
+ *                          888                       
+ *                          888                       
+ */
 
 function removeElementWithValue($array, $key, $value){
 
@@ -363,7 +554,7 @@ $_SESSION['userid'] = $_SESSION['userid'] ?? false;
 $_SESSION['attempt_failed'] = $_SESSION['attempt_failed'] ?? 0;
 $_SESSION['attempt_ts'] = $_SESSION['attempt_ts'] ?? 0;
 
-$pdo = EstablishDBCon();
+$pdo = dbConnect();
 
 // $backupFile = '/home/domain/private_data/webauthn_users.sqlite3';
 /* A post is an ajax request, otherwise display the page */
@@ -404,17 +595,20 @@ if (! empty($_POST['action'])) {
 					),
 					PASSWORD_DEFAULT
 				);
-				$user = addUser($pdo, $username, $hashedPassword);
-				$_SESSION['logged'] = true;
-				$_SESSION['username'] = $user->username;
-				$_SESSION['userid'] = $user->id;
-				$json = [
-				    'method' => 'register-user',
-				    'data'=> [
-				        'message' => "Registration successful <br> Welcome <b>${username}</b>",
-				    	'username' => $user->username,
-				    ]
-				];
+				if ($user = addUser($pdo, $username, $hashedPassword)){
+					$_SESSION['logged'] = true;
+					$_SESSION['username'] = $user->username;
+					$_SESSION['userid'] = $user->id;
+					$json = [
+					    'method' => 'register-user',
+					    'data'=> [
+					        'message' => "Registration successful <br> Welcome <b>${username}</b>",
+					    	'username' => $user->username,
+					    ]
+					];
+				} else {
+					oops("Registration failed");
+				}
 				break;
 
 
@@ -513,7 +707,7 @@ if (! empty($_POST['action'])) {
 						setUserSuccessfulLogin($pdo, $user);
 
 						if ($_POST['rememberme']) {							
-							$r_token = createToken($pdo, $user->id);
+							$r_token = addToken($pdo, $user->id);
 							setcookie("r_token", $r_token, time()+(30*24*60*60), "/");
 						}
 						$json = [
@@ -570,7 +764,7 @@ if (! empty($_POST['action'])) {
 					setUserSuccessfulLogin($pdo, $user);
 
 					if ($_POST['rememberme']) {
-						$r_token = createToken($pdo, $user->id);
+						$r_token = addToken($pdo, $user->id);
 						setcookie("r_token", $r_token, time()+(30*24*60*60), "/");
 					}
 					$json = [
