@@ -532,19 +532,20 @@ function removeElementWithValue($array, $key, $value){
 	return $array;
 }
 
-// ############################################################################
 
-
-
-
-
-
-
-
-
-
-
-
+/***
+ *                                                                                                      
+ *                                                                                                      
+ *                                                                                                      
+ *    888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 
+ *                                                                                                      
+ *    888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 888888 
+ *                                                                                                      
+ *                                                                                                      
+ *                                                                                                      
+ *                                                                                                      
+ *                                                                                                      
+ */
 
 
 session_start();
@@ -685,7 +686,7 @@ if (! empty($_POST['action'])) {
 					)) { // success :)
 
 					// Key Authentication required?
-					$webauthnkeys = json_decode($user->webauthnkeys);
+					$webauthnkeys = json_decode($user->webauthnkeys, true);
 					if (!empty($webauthnkeys)) { // YES
 						$_SESSION['attempt_userid'] = $user->id;
 
@@ -847,8 +848,8 @@ if (! empty($_POST['action'])) {
 					oops('user not found');
 				}
 				// inject key name into keyinfo JSON
-				$keyinfo_decoded = json_decode($keyinfo);
-				$keyinfo_decoded->keyname = $keyname;
+				$keyinfo_decoded = json_decode($keyinfo, true);
+				$keyinfo_decoded['keyname'] = $keyname;
 				$keyinfo = json_encode($keyinfo_decoded);
 				$webauthnkeys = $webauthn->register($keyinfo, $user->webauthnkeys);
 				setKey($pdo, $user, $webauthnkeys);
@@ -892,7 +893,7 @@ if (! empty($_POST['action'])) {
 				$json = [
 				    'method' => 'key-list',
 				    'data'=> [
-				        'keys' => json_decode($user->webauthnkeys)
+				        'keys' => json_decode($user->webauthnkeys, true)
 				    ]
 				];
 				break;

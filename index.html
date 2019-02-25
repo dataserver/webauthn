@@ -1,7 +1,10 @@
 <!doctype html>
 <html>
 <head>
-<title>webauthn php server side example and test</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>webauthn php server side example and test</title>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
 </head>
 <body>
@@ -54,7 +57,7 @@
 
 				<input type="hidden" name="action" value="login">
 				<button type="submit" class="btn btn-primary">Submit</button>
-				<div class="hint alert alert-info mt-3" style="display: none;" role="alert">
+				<div class="js-hint-press-key hint alert alert-info mt-3" style="display: none;" role="alert">
 					Do your thing: press button on key, swipe fingerprint or whatever
 				</div>
 				<div class="js-hint-delay hint alert alert-danger mt-3" style="display: none;" role="alert">
@@ -222,13 +225,14 @@ $(function(){
 		let hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 		let minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
 		let seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
-
-		if (hours < "10") { hours = "0" + hours; }
-		if (minutes < "10") { minutes = "0" + minutes; }
-		if (seconds < "10") { seconds = "0" + seconds; }
+		if (endTime < now) {
+			return;
+		}
+		if (hours < '10')   { hours = "0" + hours; }
+		if (minutes < '10') { minutes = "0" + minutes; }
+		if (seconds < '10') { seconds = "0" + seconds; }
 
 		$(ele).html(hours + " hours "+ minutes + " minutes "+ seconds + " seconds");
-
 	}
 
 	
@@ -316,9 +320,9 @@ $(function(){
 			success: function(resp){
 				/* activate the key and get the response */
 				if (resp.data.challenge) {
-					$("#form-login .hint").show();
+					$("#form-login .js-hint-press-key").show();
 					webauthnAuthenticate(resp.data.challenge, function(success, keyinfo){
-						$("#form-login .hint").hide();
+						$("#form-login .js-hint-press-key").hide();
 						if (success) {
 							$.ajax({
 								url: "server.php",
@@ -349,10 +353,11 @@ $(function(){
 			error: function(xhr, status, error){
 				if (xhr.responseJSON.error.login_delay) {
 					let delay = xhr.responseJSON.error.login_delay;
-					let endTime = new Date().getTime();
-					endTime += parseInt(delay) * 1000;
+					let now = new Date().getTime();
+					let endTime = now + parseInt(delay) * 1000;
+					
 					setInterval(function(){
-						makeTimer("#login_delay", endTime);
+						makeTimer("#login_delay", endTime);	
 					}, 1000);
 					$("#form-login .js-hint-delay").show();
 				}
